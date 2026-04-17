@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KYC 批量检测</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #e8ecf1 0%, #f0f2f5 50%, #e4e8ee 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.04);
+    padding: 40px 44px;
+    width: 580px;
+    max-width: 95vw;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+
+  .subtitle {
+    font-size: .85rem;
+    color: #888;
+    margin-bottom: 24px;
+  }
+
+  label {
+    display: block;
+    font-size: .85rem;
+    color: #555;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%;
+    padding: 9px 14px;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    font-size: .92rem;
+    margin-bottom: 14px;
+    outline: none;
+    transition: border .2s, box-shadow .2s;
+    background: #fafbfc;
+  }
+
+  input:focus, select:focus {
+    border-color: #4361ee;
+    box-shadow: 0 0 0 3px rgba(67,97,238,.12);
+    background: #fff;
+  }
+
+  .drop-zone {
+    border: 2px dashed #4361ee;
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    color: #4361ee;
+    background: #f7f8ff;
+    margin-bottom: 14px;
+    transition: background .2s, border-color .2s;
+  }
+
+  .drop-zone:hover { background: #eef0ff; }
+  .drop-zone.dragover { background: #e0e5ff; border-color: #3451d1; }
+  .drop-zone p { pointer-events: none; font-size: .95rem; }
+  .drop-zone .icon { font-size: 1.6rem; display: block; margin-bottom: 6px; }
+
+  #file-input { display: none; }
+
+  #file-list {
+    font-size: .82rem;
+    color: #666;
+    margin-bottom: 14px;
+    min-height: 20px;
+  }
+
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+
+  details { margin-bottom: 14px; }
+  summary {
+    cursor: pointer;
+    font-size: .85rem;
+    color: #4361ee;
+    user-select: none;
+    font-weight: 500;
+  }
+  .adv { padding-top: 10px; }
+
+  button[type=submit] {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #4361ee, #3a56d4);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+  }
+
+  button[type=submit]:hover { background: linear-gradient(135deg, #3a56d4, #2f49c0); }
+  button[type=submit]:active { transform: scale(0.99); }
+  button[type=submit]:disabled { background: #a0aec0; cursor: not-allowed; transform: none; }
+
+  #result { margin-top: 20px; }
+
+  pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    border-radius: 10px;
+    padding: 18px;
+    font-size: .78rem;
+    overflow: auto;
+    max-height: 420px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+
+  .tab-btn {
+    flex: 1;
+    padding: 9px;
+    border: 1.5px solid #d0d5dd;
+    border-radius: 8px;
+    background: #f7f8ff;
+    cursor: pointer;
+    font-size: .88rem;
+    color: #555;
+    font-weight: 500;
+    transition: all .2s;
+  }
+
+  .tab-btn:hover { border-color: #4361ee; color: #4361ee; }
+  .tab-btn.active { background: #4361ee; color: #fff; border-color: #4361ee; }
+
+  .spinner {
+    display: none;
+    text-align: center;
+    padding: 14px;
+    color: #4361ee;
+    font-size: .92rem;
+  }
+
+  .badge {
+    display: inline-block;
+    background: #e8ecf8;
+    color: #4361ee;
+    font-size: .72rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+    font-weight: 600;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>KYC 批量图片检测 <span class="badge">v1</span></h2>
+  <p class="subtitle">上传证件照片，自动检测 PS / AIGC 篡改痕迹</p>
+
+  <div class="tabs">
+    <button type="button" class="tab-btn active" onclick="setMode('llm')">大模型综合检测</button>
+    <button type="button" class="tab-btn" onclick="setMode('exif')">仅 EXIF 检测</button>
+  </div>
+
+  <form id="upload-form" enctype="multipart/form-data">
+    <label>商户 ID / 国家</label>
+    <input type="text" name="merchant_id" placeholder="例如：CN" required value="CN">
+
+    <label>拖拽或点击选择图片（支持多选）</label>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <span class="icon">&#128194;</span>
+      <p>点击选择 或 拖拽图片到此处</p>
+    </div>
+    <input type="file" id="file-input" name="files" multiple accept="image/*">
+    <div id="file-list">尚未选择文件</div>
+
+    <details>
+      <summary>高级选项（可选）</summary>
+      <div class="adv">
+        <div class="row">
+          <div>
+            <label>ELA 质量 (1-100)</label>
+            <input type="number" name="ela_quality" value="90" min="1" max="100">
+          </div>
+          <div>
+            <label>Provider</label>
+            <input type="text" name="provider" placeholder="留空使用默认">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Model</label>
+            <input type="text" name="model" placeholder="留空使用默认">
+          </div>
+          <div>
+            <label>VLM API Key</label>
+            <input type="password" name="vlm_api_key" placeholder="仅在开发环境中使用">
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Service API Key</label>
+            <input type="password" name="service_api_key" placeholder="X-API-Key（可选）">
+          </div>
+          <div>
+            <label>API URL</label>
+            <input type="text" name="api_url" placeholder="留空使用默认">
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <button type="submit" id="submit-btn">开始检测</button>
+  </form>
+
+  <div class="spinner" id="spinner">&#9203; 正在检测，请稍候…</div>
+  <div id="result"></div>
+</div>
+
+<script>
+  let mode = 'llm';
+
+  function setMode(m) {
+    mode = m;
+    document.querySelectorAll('.tab-btn').forEach((b, i) =>
+      b.classList.toggle('active', (i === 0 && m === 'llm') || (i === 1 && m === 'exif'))
+    );
+    document.querySelector('details').style.display = m === 'llm' ? '' : 'none';
+  }
+
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    const dt = new DataTransfer();
+    Array.from(e.dataTransfer.files).forEach(f => dt.items.add(f));
+    document.getElementById('file-input').files = dt.files;
+    updateFileList(dt.files);
+  });
+
+  document.getElementById('file-input').addEventListener('change', e => updateFileList(e.target.files));
+
+  function updateFileList(files) {
+    const el = document.getElementById('file-list');
+    if (!files || files.length === 0) { el.textContent = '尚未选择文件'; return; }
+    el.textContent = `已选择 ${files.length} 个文件：` + Array.from(files).map(f => f.name).join('、');
+  }
+
+  document.getElementById('upload-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const files = document.getElementById('file-input').files;
+    if (!files || files.length === 0) { alert('请先选择图片文件'); return; }
+
+    const form = e.target;
+    const fd = new FormData();
+    Array.from(files).forEach(f => fd.append('files', f));
+    fd.append('merchant_id', form.merchant_id.value);
+
+    if (mode === 'llm') {
+      fd.append('ela_quality', form.ela_quality.value);
+      ['provider', 'model', 'api_url'].forEach(k => { if (form[k].value) fd.append(k, form[k].value); });
+    }
+
+    const url = mode === 'llm' ? '/v1/kyc/photo-vlm-analyze' : '/v1/kyc/exif-analyze';
+    const btn = document.getElementById('submit-btn');
+    const spinner = document.getElementById('spinner');
+    btn.disabled = true;
+    btn.textContent = '检测中…';
+    spinner.style.display = 'block';
+    document.getElementById('result').innerHTML = '';
+
+    const headers = {};
+    if (mode === 'llm' && form.vlm_api_key.value) {
+      headers['X-VLM-API-Key'] = form.vlm_api_key.value;
+    }
+    if (form.service_api_key.value) {
+      headers['X-API-Key'] = form.service_api_key.value;
+    }
+
+    try {
+      const resp = await fetch(url, { method: 'POST', body: fd, headers });
+      const data = await resp.json();
+      document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    } catch (err) {
+      document.getElementById('result').innerHTML = '<pre style="color:#f38ba8">请求失败：' + err + '</pre>';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '开始检测';
+      spinner.style.display = 'none';
+    }
+  });
+</script>
+</body>
+</html>
